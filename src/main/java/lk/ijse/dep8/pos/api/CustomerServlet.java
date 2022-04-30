@@ -25,7 +25,6 @@ public class CustomerServlet extends HttpServlet {
     private volatile DataSource pool;
 
     private void doSaveOrUpdate(HttpServletRequest req, HttpServletResponse res) throws IOException {
-        System.out.println("jbcj");
         if (req.getContentType() == null || !req.getContentType().toLowerCase().startsWith("application/json")) {
             res.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
             return;
@@ -39,21 +38,28 @@ public class CustomerServlet extends HttpServlet {
                         req.getServletPath().equalsIgnoreCase("/customers/")))){
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
+        } else if (method.equals("PUT") && !(pathInfo != null &&
+                pathInfo.substring(1).matches("\\d{9}[Vv][/]?"))){
+            res.sendError(HttpServletResponse.SC_NOT_FOUND, "Member does not exist");
+            return;
         }
+
         try {
             Jsonb jsonb = JsonbBuilder.create();
             CustomerDTO customer = jsonb.fromJson(req.getReader(), CustomerDTO.class);
-            if (method.equals("POST")) {
-                if (customer.getNic() == null || !customer.getNic().matches("\\d{9}[Vv]")) {
-                    throw new ValidationException("Invalid NIC");
-                } else if (customer.getName() == null || !(customer.getName().matches("[A-Za-z ]+"))) {
-                    throw new ValidationException("Invalid Name");
-                } else if (customer.getAddress() == null || !(customer.getAddress().matches("[A-Za-z ]+"))) {
-                    throw new ValidationException("Invalid Address");
-                } else if (customer.getContact() == null || !customer.getContact().matches("\\d{3}-\\d{7}")) {
-                    throw new ValidationException("Invalid Contact Number");
-                }
+            if (method.equals("POST") &&
+                    (customer.getNic() == null || !customer.getNic().matches("\\d{9}[Vv]"))) {
+                throw new ValidationException("Invalid NIC");
+            } else if (customer.getName() == null || !(customer.getName().matches("[A-Za-z ]+"))) {
+                throw new ValidationException("Invalid Name");
+            } else if (customer.getAddress() == null || !(customer.getAddress().matches("[A-Za-z ]+"))) {
+                throw new ValidationException("Invalid Address");
+            } else if (customer.getContact() == null || !customer.getContact().matches("\\d{3}-\\d{7}")) {
+                throw new ValidationException("Invalid contact number");
             }
+                else if (method.equals("PUT")) {
+                    customer.setNic(pathInfo.replaceAll("[/]", ""));
+                }
 
             try (Connection connection = pool.getConnection()) {
                 PreparedStatement stm = connection.prepareStatement("SELECT * FROM customer WHERE nic=?");
@@ -62,6 +68,15 @@ public class CustomerServlet extends HttpServlet {
                     if (method.equals("POST")) {
                         res.sendError(HttpServletResponse.SC_CONFLICT, "Customer already exists");
                     } else {
+                            stm =  connection.prepareStatement("UPDATE customer SET name=?, address=?, contact=? WHERE nic=?");
+                            stm.setString(1, customer.getName());
+                            stm.setString(2, customer.getAddress());
+                            stm.setString(3, customer.getContact());
+                            stm.setString(4, customer.getNic());
+                            if (stm.executeUpdate() != 1){
+                                throw new RuntimeException("Failed to update the member");
+                            }
+                            res.setStatus(HttpServletResponse.SC_NO_CONTENT);
                     }
                 } else {
                     stm = connection.prepareStatement("INSERT INTO customer (nic, name, address, contact) VALUES (?,?,?,?)");
@@ -88,5 +103,10 @@ public class CustomerServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         doSaveOrUpdate(req,resp);
+    }
+
+    @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        doSaveOrUpdate(req, resp);
     }
 }
