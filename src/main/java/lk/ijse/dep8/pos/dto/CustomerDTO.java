@@ -9,6 +9,12 @@ public class CustomerDTO {
     public CustomerDTO() {
     }
 
+    public CustomerDTO(String name, String address, String contact) {
+        this.name = name;
+        this.address = address;
+        this.contact = contact;
+    }
+
     public CustomerDTO(String nic, String name, String address, String contact) {
         this.nic = nic;
         this.name = name;
