@@ -1,6 +1,8 @@
 package lk.ijse.dep8.pos.dto;
 
-public class CustomerDTO {
+import java.io.Serializable;
+
+public class CustomerDTO implements Serializable {
     private String nic;
     private String name;
     private String address;
