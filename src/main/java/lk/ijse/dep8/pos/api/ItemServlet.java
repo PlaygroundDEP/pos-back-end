@@ -34,6 +34,41 @@ public class ItemServlet extends HttpServlet {
         doSaveOrUpdate(req, resp);
     }
 
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        if (req.getPathInfo() == null || req.getPathInfo().equals("/")) {
+            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, "Unable to delete all items");
+            return;
+        } /*else if (req.getPathInfo() != null &&
+                !req.getPathInfo().substring(1).matches("")) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Item does not exist");
+            return;
+        }*/
+
+        String id = req.getPathInfo().replaceAll("[/]", "");
+
+        try (Connection connection = pool.getConnection()) {
+            PreparedStatement stm = connection.
+                    prepareStatement("SELECT * FROM item WHERE id=?");
+            stm.setString(1, id);
+            ResultSet rst = stm.executeQuery();
+
+            if (rst.next()) {
+                stm = connection.prepareStatement("DELETE FROM item WHERE id=?");
+                stm.setString(1, id);
+                if (stm.executeUpdate() != 1) {
+                    throw new RuntimeException("Failed to delete the item");
+                }
+                resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+            } else {
+                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Item does not exist");
+            }
+        } catch (SQLException | RuntimeException e) {
+            e.printStackTrace();
+            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private void doSaveOrUpdate(HttpServletRequest req, HttpServletResponse res) throws IOException {
 
         if (req.getContentType()==null || req.getContentType().toLowerCase().startsWith("multipart/form-date")) {
