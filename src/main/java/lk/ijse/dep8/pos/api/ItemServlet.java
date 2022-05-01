@@ -29,8 +29,12 @@ public class ItemServlet extends HttpServlet {
         doSaveOrUpdate(req, resp);
     }
 
+    @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        doSaveOrUpdate(req, resp);
+    }
+
     private void doSaveOrUpdate(HttpServletRequest req, HttpServletResponse res) throws IOException {
-        System.out.println(req.getParameter("available"));
 
         if (req.getContentType()==null || req.getContentType().toLowerCase().startsWith("multipart/form-date")) {
             res.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
@@ -43,7 +47,11 @@ public class ItemServlet extends HttpServlet {
         if (method.equals("POST") && (pathInfo!=null && !pathInfo.equals("/"))) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
-        }
+        } /*else if (method.equals("PUT") && !(pathInfo != null &&
+                pathInfo.substring(1).matches("[I]{1}d{3}"))){
+            res.sendError(HttpServletResponse.SC_NOT_FOUND, "Item does not exist");
+            return;
+        }*/
         
         try{
             String id = generateId();
@@ -76,18 +84,45 @@ public class ItemServlet extends HttpServlet {
                 throw new ValidationException("Invalid Available Items");
             }
 
-            try(Connection connection = pool.getConnection()) {
-                PreparedStatement stm = connection.prepareStatement("INSERT INTO item (id, name, price, available, preview) VALUES (?,?,?,?,?)");
-                stm.setString(1,item.getId());
-                stm.setString(2, item.getName());
-                stm.setFloat(3, item.getPrice());
-                stm.setInt(4, item.getAvailable());
-                stm.setBlob(5, item.getPreview() == null ? null : new SerialBlob(item.getPreview()));
+            if (method.equals("PUT")) {
+                item.setId(pathInfo.replaceAll("[/]", ""));
+            }
 
-                if (stm.executeUpdate() != 1) {
-                    throw new RuntimeException("Failed to add a book");
+            try(Connection connection = pool.getConnection()) {
+                PreparedStatement stm = connection.prepareStatement("SELECT * FROM item WHERE id=?");
+                stm.setString(1, item.getId());
+                ResultSet rst = stm.executeQuery();
+
+                if (rst.next()) {
+                    if (method.equals("POST")) {
+                        res.sendError(HttpServletResponse.SC_CONFLICT, "Item already exists");
+                    } else {
+                        stm = connection.
+                                prepareStatement("UPDATE item SET name=?, price=?, available=?, preview=? WHERE id=?");
+                        stm.setString(1, item.getName());
+                        stm.setFloat(2, item.getPrice());
+                        stm.setInt(3, item.getAvailable());
+                        stm.setBlob(4, item.getPreview() != null ? new SerialBlob(item.getPreview()) : null);
+                        stm.setString(5, item.getId());
+
+                        if (stm.executeUpdate() != 1) {
+                            throw new RuntimeException("Failed to update the item details");
+                        }
+                        res.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                    }
+                } else {
+                    stm = connection.prepareStatement("INSERT INTO item (id, name, price, available, preview) VALUES (?,?,?,?,?)");
+                    stm.setString(1, item.getId());
+                    stm.setString(2, item.getName());
+                    stm.setFloat(3, item.getPrice());
+                    stm.setInt(4, item.getAvailable());
+                    stm.setBlob(5, item.getPreview() == null ? null : new SerialBlob(item.getPreview()));
+
+                    if (stm.executeUpdate() != 1) {
+                        throw new RuntimeException("Failed to add the item");
+                    }
+                    res.setStatus(HttpServletResponse.SC_CREATED);
                 }
-                res.setStatus(HttpServletResponse.SC_CREATED);
             }
             
         } catch (ValidationException e) {
